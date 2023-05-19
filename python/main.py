@@ -4,6 +4,7 @@ import pathlib
 import json
 import hashlib
 import shutil
+import sqlite3
 from typing import Union
 from fastapi import FastAPI, Query, Form, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
@@ -26,11 +27,24 @@ app.add_middleware(
 def root():
     return {"message": "Hello, world!"}
 
-@app.get("/items/")
-def getItem():
-    with open('items.json') as f:
-        message = json.load(f)
-    return {f"{message}"}
+@app.get("/items")
+async def getItem():
+    # with open('items.json', "r", encoding="utf-8") as f:
+    #     return json.load(f)
+    # except json.decoder.JSONDecodeError: #json形式でない場合
+    #dbへのアクセス
+    con = sqlite3.connect("../db/mercari.sqlite3")
+    cur = con.cursor()
+    items = await get_items(cur)
+    return items
+    #sqlite3のerror
+
+async def get_items(cur):
+    cur.execute("SELECT id,name,category,image_name FROM items")
+    items = cur.fetchall()
+    #print(items)
+    return items
+   
 
 @app.get("/items/{item_id}")
 def read_item(item_id):
@@ -38,17 +52,11 @@ def read_item(item_id):
         json_data = json.load(f)
         item = json_data["items"][int(item_id)-1]
         print(item)
+    #dbの場合
     return {f"{item}"}
-    
-
-# @app.get("/items/<items_id>")
-# def getItem():
-#     with open('items.json') as f:
-#         message = json.load(f)
-#     return {f"{message}"}
 
 @app.post("/items")
-def add_item(name: str = Form(...), category:str = Form(...), image:UploadFile = File(...)):
+async def add_item(name: str = Form(...), category:str = Form(...), image:UploadFile = File(...)):
     logger.info(f"Receive item: {name}, category: {category}")
 
     #画像の処理
@@ -57,20 +65,32 @@ def add_item(name: str = Form(...), category:str = Form(...), image:UploadFile =
     if image:
         fileobj = image.file
         upload_dir = open(os.path.join('images', image_name),'wb+')
-        shutil.copyfileobj(fileobj, upload_dir)
-        upload_dir.close()
-        return {"アップロードファイル名": image_name}
+        # shutil.copyfileobj(fileobj, upload_dir)
+        # upload_dir.close()
+        #return {"アップロードファイル名": image_name}
 
-    new_data = {"name": name, "category": category, "image_filename": image_name}
+    #new_data = {"name": name, "category": category, "image_filename": image_name}
 
-    if os.path.exists('items.json'):
-        with open('items.json', "r", encoding="utf-8") as f:
-            json_data = json.load(f)
-            f.close()
-    with open('items.json', "w", encoding="utf-8") as f:
-        json_data["items"].append(new_data)
-        json.dump(json_data, f, ensure_ascii=False , sort_keys=False)
+    #dbへのアクセス
+    con = sqlite3.connect("../db/mercari.sqlite3")
+    cur = con.cursor()
+    id = await get_id(cur)
+    cur.execute("""INSERT INTO items(id, name, category, image_name) VALUES(?,?,?,?);""",(int(id[0][0])+1,name,category, image_name,))
+    con.commit()
+
+    # if os.path.exists('items.json'):
+    #     with open('items.json', "r", encoding="utf-8") as f:
+    #         json_data = json.load(f)
+    #         f.close()
+    # with open('items.json', "w", encoding="utf-8") as f:
+    #     json_data["items"].append(new_data)
+    #     json.dump(json_data, f, ensure_ascii=False , sort_keys=False)
     return {"message": f"item received: {name}"}
+
+async def get_id(cur):
+    cur.execute("SELECT count(*) FROM items")
+    id = cur.fetchall()
+    return id
 
 @app.get("/image/{image_filename}")
 async def get_image(image_filename):
