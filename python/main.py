@@ -44,7 +44,21 @@ async def get_items(cur):
     items = cur.fetchall()
     #print(items)
     return items
-   
+
+@app.get("/search")
+async def read_items(keyword: str = None):
+    con = sqlite3.connect("../db/mercari.sqlite3")
+    cur = con.cursor()
+    items = await search_items(cur, keyword)
+    return items
+
+async def search_items(cur, keyword):
+    print(keyword)
+    cur.execute("""SELECT id, name, category, image_name FROM items WHERE name=(?);""",(keyword,))
+    items = cur.fetchall()
+    #print(items)
+    return items
+
 
 @app.get("/items/{item_id}")
 def read_item(item_id):
