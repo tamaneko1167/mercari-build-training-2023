@@ -88,8 +88,13 @@ async def add_item(name: str = Form(...), category:str = Form(...), image:Upload
     #dbへのアクセス
     con = sqlite3.connect("../db/mercari.sqlite3")
     cur = con.cursor()
+
+    #取得したcategoryをcategory_idに変換
+    category_id = await get_category_id(cur, category)
+    
+    #idの取得
     id = await get_id(cur)
-    cur.execute("""INSERT INTO items(id, name, category, image_name) VALUES(?,?,?,?);""",(int(id[0][0])+1,name,category, image_name,))
+    cur.execute("""INSERT INTO items(id, name, category_id, image_name) VALUES(?,?,?,?);""",(int(id[0][0])+1, name, category_id, image_name,))
     con.commit()
 
     # if os.path.exists('items.json'):
@@ -105,6 +110,11 @@ async def get_id(cur):
     cur.execute("SELECT count(*) FROM items")
     id = cur.fetchall()
     return id
+
+async def get_category_id(cur, category):
+    category_id = cur.execute("""SERECT id FROM category WHERE name=(?);""",(category,))
+    return category_id
+
 
 @app.get("/image/{image_filename}")
 async def get_image(image_filename):
